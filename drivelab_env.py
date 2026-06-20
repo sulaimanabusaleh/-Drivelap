@@ -28,9 +28,9 @@ PYTHON_313 = r"C:\Users\WZLFPYG\AppData\Local\anaconda3\python.exe"
 SERVER_SCRIPT = str(HERE / "drivelab_server.py")
 
 # --- Grenzen für den Observation Space ---
-OBS_LOW  = np.array([-5.0,  -1.5,  -0.2,   0.0,   0.0], dtype=np.float32)
-OBS_HIGH = np.array([ 5.0,   1.5,   0.2,  10.0,  10.0], dtype=np.float32)
-#                    e_y    e_psi  curv  distL  distR
+OBS_LOW  = np.array([-5.0,  -1.5,  -0.2,   0.0,   0.0,   0.0], dtype=np.float32)
+OBS_HIGH = np.array([ 5.0,   1.5,   0.2,  10.0,  10.0,  10.0], dtype=np.float32)
+#                    e_y    e_psi  curv  distL  distR  laneW
 
 LENKWINKEL_MAX = 0.5
 
@@ -123,6 +123,6 @@ class DrivelabEnv(gym.Env):
     def _obs_to_array(self, obs: dict) -> np.ndarray:
         return np.array(
             [obs["e_y"], obs["e_psi"], obs["curvature"],
-             obs["distLeft"], obs["distRight"]],
+             obs["distLeft"], obs["distRight"], obs["laneWidth"]],
             dtype=np.float32,
         )

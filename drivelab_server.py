@@ -45,6 +45,7 @@ def obs_to_dict(obs) -> dict:
         "e_y":       obs.e_y,
         "e_psi":     obs.e_psi,
         "curvature": obs.curvature,
+        "laneWidth": obs.laneWidth,
         "distLeft":  obs.distLeft,
         "distRight": obs.distRight,
         "offRoad":   bool(obs.offRoad),
