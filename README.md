@@ -1,11 +1,15 @@
 # -Drivelap
 
 Wie es funktioniert (Schritt für Schritt)
+
+
 ┌─────────────────┐        JSON über stdin/stdout        ┌──────────────────────┐
 │  drivelab_env.py│  ◄──────────────────────────────────►│ drivelab_server.py   │
-│  (Python 3.12)  │                                       │ (Python 3.13)        │
-│  KI / Gymnasium │                                       │ Physik-Simulation    │
-└─────────────────┘                                       └──────────────────────┘
+│  (Python 3.12)  │                                      │ (Python 3.13)        │
+│  KI / Gymnasium │                                      │ Physik-Simulation    │
+└─────────────────┘                                      └──────────────────────┘
+
+
 1. Die Simulation (drivelab_server.py) — läuft in Python 3.13
 
 Enthält ein echtes Fahrzeugphysik-Modell (2000 kg Auto, Reifenmodell, Lenkung)
