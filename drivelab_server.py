@@ -22,7 +22,7 @@ import json
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE / "drivelab.cp313-win_amd64"))
+sys.path.insert(0, str(HERE))
 
 mingw_path = r"C:\Program Files\mingw64\bin"
 if os.path.isdir(mingw_path):
