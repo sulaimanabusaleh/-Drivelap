@@ -2,7 +2,6 @@
 
 Wie es funktioniert (Schritt für Schritt)
 
-
 ┌─────────────────┐        JSON über stdin/stdout        ┌──────────────────────┐
 │  drivelab_env.py│  ◄──────────────────────────────────►│ drivelab_server.py   │
 │  (Python 3.12)  │                                      │ (Python 3.13)        │
