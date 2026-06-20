@@ -1,0 +1,117 @@
+"""
+eval.py — Bestes Modell laden und testen.
+
+Ladet das gespeicherte beste Modell aus results/best_model/,
+faehrt eine deterministische Episode und zeigt die 5 Plots.
+
+Starten:
+    python eval.py
+"""
+
+import csv
+import sys
+from pathlib import Path
+
+import numpy as np
+from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import VecNormalize
+from stable_baselines3.common.env_util import make_vec_env
+
+from drivelab_env import DrivelabEnv
+from plotter import make_plots
+
+HERE    = Path(__file__).resolve().parent
+RESULTS = HERE / "results"
+
+TRAJ_HEADER = [
+    "t", "x", "y", "psi", "xdot", "ydot", "psidot",
+    "rho_v", "rho_h", "Fvx", "Fvy", "Fhx", "Fhy", "dist",
+    "s", "e_y", "e_psi", "distLeft", "distRight", "offRoad",
+]
+
+
+def main():
+    best_model_path = RESULTS / "best_model" / "best_model.zip"
+    vecnorm_path    = RESULTS / "vecnormalize.pkl"
+
+    if not best_model_path.exists():
+        sys.exit(f"Kein Modell gefunden unter: {best_model_path}")
+
+    print("=== DriveLab Eval ===")
+    print(f"  Modell: {best_model_path}")
+    print()
+
+    # --- Normierung laden (gleiche Statistiken wie beim Training) ---
+    vec_env = make_vec_env(DrivelabEnv, n_envs=1)
+    if vecnorm_path.exists():
+        vec_env = VecNormalize.load(str(vecnorm_path), vec_env)
+        vec_env.training = False       # keine Updates der Statistiken
+        vec_env.norm_reward = False    # Reward NICHT normalisieren
+        print(f"  Normierung geladen: {vecnorm_path}")
+    else:
+        print("  Warnung: vecnormalize.pkl nicht gefunden — keine Normierung!")
+
+    # --- Modell laden ---
+    model = PPO.load(str(best_model_path), env=vec_env)
+    print("  Modell geladen.\n")
+
+    # --- Episode fahren ---
+    print("Fahre Eval-Episode ...")
+    obs = vec_env.reset()
+    done = False
+    rows = []
+    total_reward = 0.0
+    step = 0
+
+    while not done:
+        action, _ = model.predict(obs, deterministic=True)
+        obs, reward, terminated, info = vec_env.step(action)
+        total_reward += float(reward[0])
+        done = bool(terminated[0])
+        step += 1
+
+        # Zustandsvektor aus info holen
+        state = info[0].get("state", [0.0] * 13)
+        obs_raw = vec_env.get_original_obs()[0]   # unnormierte Obs
+
+        rows.append([
+            f"{info[0].get('t', 0.0):.5f}",
+            *[f"{v:.6g}" for v in state],
+            f"{info[0].get('s', 0.0):.6g}",
+            f"{obs_raw[0]:.6g}",   # e_y
+            f"{obs_raw[1]:.6g}",   # e_psi
+            f"{obs_raw[3]:.6g}",   # distLeft
+            f"{obs_raw[4]:.6g}",   # distRight
+            int(info[0].get("offRoad", False)),
+        ])
+
+    vec_env.close()
+
+    print(f"  Schritte       : {step}")
+    print(f"  Gesamt-Reward  : {total_reward:.1f}")
+    print(f"  offRoad        : {info[0].get('offRoad', False)}")
+    print()
+
+    # --- Trajektorie speichern ---
+    traj_path  = RESULTS / "eval_trajectory.csv"
+    track_path = RESULTS / "track.csv"
+
+    with open(traj_path, "w", newline="") as f:
+        w = csv.writer(f, delimiter="\t")
+        w.writerow(TRAJ_HEADER)
+        w.writerows(rows)
+
+    print(f"  Trajektorie gespeichert: {traj_path}")
+
+    # --- Plots anzeigen ---
+    print("  Erstelle Plots ...")
+    make_plots(
+        track_path,
+        traj_path,
+        title_suffix="  [Bestes Modell — Eval]",
+        show=True,
+    )
+
+
+if __name__ == "__main__":
+    main()

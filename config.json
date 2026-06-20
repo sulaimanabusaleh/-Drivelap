@@ -1,0 +1,7 @@
+{
+  "sim":     { "t_end": 320.0, "dt": 0.01, "v0": 10.0, "output": "results/output.csv" },
+  "vehicle": { "m": 2000.0, "theta_zz": 2585.6, "theta_v": 1.7, "theta_h": 1.7,
+               "l_v": 1.1853, "l_h": 1.5044 , "cwA": 0.0 },
+  "tire":    { "cs_stat": 120000, "ca_stat": 80000, "cx_stat": 400000,
+               "cy_stat": 160000, "r": 0.31 }
+}
