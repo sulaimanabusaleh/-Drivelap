@@ -2,12 +2,15 @@
 RL-Training — Spurhalten mit PPO (Stable-Baselines3)
 
 Starten:
-    python train.py
+    python train.py                  <- speichert in results/run_1/ (oder naechste freie Nummer)
+    python train.py training_1       <- speichert in results/training_1/
+    python train.py mit_lanewidth    <- speichert in results/mit_lanewidth/
 
-Ergebnis:
-    results/best_model/      <- bestes Modell (nach Evaluation)
-    results/checkpoints/     <- Zwischenstände alle 10.000 Schritte
-    results/plots/update_NNN <- 5 PNG-Plots nach jedem N-ten Update
+Ergebnis (im jeweiligen Ordner):
+    results/<name>/best_model/       <- bestes Modell (nach Evaluation)
+    results/<name>/checkpoints/      <- Zwischenstände alle 10.000 Schritte
+    results/<name>/plots/update_NNN  <- 5 PNG-Plots nach jedem N-ten Update
+    results/<name>/vecnormalize.pkl  <- Normalisierungs-Statistiken
 """
 
 import csv
@@ -35,12 +38,12 @@ RESULTS = HERE / "results"
 RESULTS.mkdir(exist_ok=True)
 
 # --- Hyperparameter -------------------------------------------------
-TOTAL_TIMESTEPS  = 500_000
-N_ENVS           = 4
-EVAL_FREQ        = 10_000
-CHECKPOINT_FREQ  = 10_000
-EVAL_EPISODES    = 5
-PLOT_EVERY_N_UPDATES = 1    # nach jedem PPO-Update plotten
+TOTAL_TIMESTEPS      = 500_000
+N_ENVS               = 4
+EVAL_FREQ            = 10_000
+CHECKPOINT_FREQ      = 10_000
+EVAL_EPISODES        = 5
+PLOT_EVERY_N_UPDATES = 1
 
 
 TRAJ_HEADER = [
@@ -50,18 +53,20 @@ TRAJ_HEADER = [
 ]
 
 
-class EvalAndPlotCallback(BaseCallback):
-    """
-    Nach jedem PLOT_EVERY_N_UPDATES PPO-Updates:
-    1. Eine deterministische Eval-Episode fahren
-    2. Trajektorie als trajectory.csv speichern
-    3. 5 Plots als PNG in results/plots/update_NNN/ speichern
-    """
+def next_run_name() -> str:
+    """Gibt run_1, run_2, ... zurück — nächste freie Nummer."""
+    i = 1
+    while (RESULTS / f"run_{i}").exists():
+        i += 1
+    return f"run_{i}"
 
-    def __init__(self, plot_every: int = PLOT_EVERY_N_UPDATES, verbose: int = 1):
+
+class EvalAndPlotCallback(BaseCallback):
+    def __init__(self, run_dir: Path, plot_every: int = PLOT_EVERY_N_UPDATES, verbose: int = 1):
         super().__init__(verbose)
         self._update_count = 0
         self._plot_every   = plot_every
+        self._run_dir      = run_dir
 
     def _on_rollout_end(self) -> None:
         self._update_count += 1
@@ -69,21 +74,19 @@ class EvalAndPlotCallback(BaseCallback):
             return
 
         update_str = f"update_{self._update_count:04d}"
-        plot_dir   = RESULTS / "plots" / update_str
-        traj_path  = RESULTS / "trajectory.csv"
+        plot_dir   = self._run_dir / "plots" / update_str
+        traj_path  = self._run_dir / "trajectory.csv"
         track_path = RESULTS / "track.csv"
 
         if self.verbose:
             print(f"\n[EvalAndPlot] Update {self._update_count} — fahre Eval-Episode ...")
 
-        # --- Eval-Episode -------------------------------------------
         eval_env = DrivelabEnv()
         obs_raw, _ = eval_env.reset()
         rows = []
         done = False
 
         while not done:
-            # Obs normalisieren mit laufenden Statistiken des Training-Envs
             obs_norm = self.training_env.normalize_obs(
                 obs_raw[np.newaxis, :]
             ).flatten()
@@ -92,21 +95,19 @@ class EvalAndPlotCallback(BaseCallback):
             done = terminated or truncated
 
             state = info.get("state", [0.0] * 13)
-            # state = [X, Y, PSI, XDOT, YDOT, PSIDOT, RHO_V, RHO_H, FVX, FVY, FHX, FHY, DIST]
             rows.append([
                 f"{info.get('t', 0.0):.5f}",
-                *[f"{v:.6g}" for v in state],       # x,y,psi,xdot,ydot,psidot,rho_v,rho_h,Fvx,Fvy,Fhx,Fhy,dist
+                *[f"{v:.6g}" for v in state],
                 f"{info.get('s', 0.0):.6g}",
-                f"{obs_raw[0]:.6g}",                # e_y
-                f"{obs_raw[1]:.6g}",                # e_psi
-                f"{obs_raw[3]:.6g}",                # distLeft
-                f"{obs_raw[4]:.6g}",                # distRight
+                f"{obs_raw[0]:.6g}",
+                f"{obs_raw[1]:.6g}",
+                f"{obs_raw[3]:.6g}",
+                f"{obs_raw[4]:.6g}",
                 int(info.get("offRoad", False)),
             ])
 
         eval_env.close()
 
-        # --- Trajektorie speichern ----------------------------------
         with open(traj_path, "w", newline="") as f:
             w = csv.writer(f, delimiter="\t")
             w.writerow(TRAJ_HEADER)
@@ -116,7 +117,6 @@ class EvalAndPlotCallback(BaseCallback):
         if self.verbose:
             print(f"           {len(rows)} Schritte, Plots -> {plot_dir}")
 
-        # --- Plots speichern ----------------------------------------
         try:
             make_plots(
                 track_path,
@@ -137,7 +137,20 @@ def make_env():
 
 
 def main():
+    # --- Run-Name aus Argument oder automatisch ---------------------
+    if len(sys.argv) > 1:
+        run_name = sys.argv[1]
+    else:
+        run_name = next_run_name()
+
+    run_dir = RESULTS / run_name
+    if run_dir.exists():
+        print(f"Warnung: Ordner '{run_dir}' existiert bereits — Dateien werden überschrieben.")
+    run_dir.mkdir(parents=True, exist_ok=True)
+
     print("=== DriveLab RL-Training (PPO) ===")
+    print(f"  Run-Name        : {run_name}")
+    print(f"  Ergebnisse in   : {run_dir}")
     print(f"  Gesamt-Schritte : {TOTAL_TIMESTEPS:,}")
     print(f"  Parallele Envs  : {N_ENVS}")
     print(f"  Plot alle       : {PLOT_EVERY_N_UPDATES} Updates")
@@ -152,20 +165,20 @@ def main():
 
     checkpoint_cb = CheckpointCallback(
         save_freq=CHECKPOINT_FREQ,
-        save_path=str(RESULTS / "checkpoints"),
+        save_path=str(run_dir / "checkpoints"),
         name_prefix="ppo_drivelab",
         verbose=1,
     )
     eval_cb = EvalCallback(
         eval_env=vec_eval,
-        best_model_save_path=str(RESULTS / "best_model"),
-        log_path=str(RESULTS / "eval_logs"),
+        best_model_save_path=str(run_dir / "best_model"),
+        log_path=str(run_dir / "eval_logs"),
         eval_freq=EVAL_FREQ,
         n_eval_episodes=EVAL_EPISODES,
         deterministic=True,
         verbose=1,
     )
-    plot_cb = EvalAndPlotCallback(plot_every=PLOT_EVERY_N_UPDATES, verbose=1)
+    plot_cb = EvalAndPlotCallback(run_dir=run_dir, plot_every=PLOT_EVERY_N_UPDATES, verbose=1)
 
     callbacks = CallbackList([checkpoint_cb, eval_cb, plot_cb])
 
@@ -186,12 +199,11 @@ def main():
     print("Starte Training...")
     model.learn(total_timesteps=TOTAL_TIMESTEPS, callback=callbacks)
 
-    model_path = RESULTS / "ppo_drivelab_final"
-    model.save(str(model_path))
-    vec_train.save(str(RESULTS / "vecnormalize.pkl"))
+    model.save(str(run_dir / "ppo_drivelab_final"))
+    vec_train.save(str(run_dir / "vecnormalize.pkl"))
     print(f"\nTraining abgeschlossen.")
-    print(f"  Modell     -> {model_path}.zip")
-    print(f"  Normierung -> {RESULTS / 'vecnormalize.pkl'}")
+    print(f"  Modell     -> {run_dir / 'ppo_drivelab_final.zip'}")
+    print(f"  Normierung -> {run_dir / 'vecnormalize.pkl'}")
 
 
 if __name__ == "__main__":

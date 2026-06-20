@@ -1,10 +1,10 @@
 """
-eval.py — Bestes Modell laden und testen.
+eval.py — Trainiertes Modell laden und testen.
 
 Starten:
-    python eval.py                                         <- nimmt results/best_model/best_model.zip
-    python eval.py results/checkpoints/ppo_drivelab_10000_steps.zip
-    python eval.py C:/eigener/pfad/modell.zip
+    python eval.py run_1                          <- bestes Modell aus results/run_1/
+    python eval.py run_2                          <- bestes Modell aus results/run_2/
+    python eval.py run_1 checkpoints/ppo_drivelab_10000_steps.zip  <- bestimmter Checkpoint
 """
 
 import csv
@@ -30,25 +30,41 @@ TRAJ_HEADER = [
 
 
 def main():
-    # --- Pfad aus Argument oder Standard ---
-    if len(sys.argv) > 1:
-        best_model_path = Path(sys.argv[1])
-    else:
-        best_model_path = RESULTS / "best_model" / "best_model.zip"
-
-    vecnorm_path = RESULTS / "vecnormalize.pkl"
-
-    if not best_model_path.exists():
+    if len(sys.argv) < 2:
         sys.exit(
-            f"Modell nicht gefunden: {best_model_path}\n"
-            f"Benutze: python eval.py <pfad_zum_modell.zip>"
+            "Bitte Run-Name angeben:\n"
+            "  python eval.py run_1\n"
+            "  python eval.py run_1 checkpoints/ppo_drivelab_10000_steps.zip"
+        )
+
+    run_name = sys.argv[1]
+    run_dir  = RESULTS / run_name
+
+    if not run_dir.exists():
+        sys.exit(f"Run-Ordner nicht gefunden: {run_dir}")
+
+    # Modellpfad: Standard = best_model, oder eigener Checkpoint
+    if len(sys.argv) > 2:
+        model_path = run_dir / sys.argv[2]
+    else:
+        model_path = run_dir / "best_model" / "best_model.zip"
+
+    vecnorm_path = run_dir / "vecnormalize.pkl"
+
+    if not model_path.exists():
+        sys.exit(
+            f"Modell nicht gefunden: {model_path}\n"
+            f"Verfügbare Checkpoints in {run_dir / 'checkpoints'}:"
+            f"\n  " + "\n  ".join(str(p.name) for p in (run_dir / "checkpoints").glob("*.zip"))
+            if (run_dir / "checkpoints").exists() else ""
         )
 
     print("=== DriveLab Eval ===")
-    print(f"  Modell: {best_model_path}")
+    print(f"  Run     : {run_name}")
+    print(f"  Modell  : {model_path}")
     print()
 
-    # --- Normierung laden (gleiche Statistiken wie beim Training) ---
+    # --- Normierung laden ---
     vec_env = make_vec_env(DrivelabEnv, n_envs=1)
     if vecnorm_path.exists():
         vec_env = VecNormalize.load(str(vecnorm_path), vec_env)
@@ -59,7 +75,7 @@ def main():
         print("  Warnung: vecnormalize.pkl nicht gefunden — keine Normierung!")
 
     # --- Modell laden ---
-    model = PPO.load(str(best_model_path), env=vec_env)
+    model = PPO.load(str(model_path), env=vec_env)
     print("  Modell geladen.\n")
 
     # --- Episode fahren ---
@@ -84,10 +100,10 @@ def main():
             f"{info[0].get('t', 0.0):.5f}",
             *[f"{v:.6g}" for v in state],
             f"{info[0].get('s', 0.0):.6g}",
-            f"{obs_raw[0]:.6g}",   # e_y
-            f"{obs_raw[1]:.6g}",   # e_psi
-            f"{obs_raw[3]:.6g}",   # distLeft
-            f"{obs_raw[4]:.6g}",   # distRight
+            f"{obs_raw[0]:.6g}",
+            f"{obs_raw[1]:.6g}",
+            f"{obs_raw[3]:.6g}",
+            f"{obs_raw[4]:.6g}",
             int(info[0].get("offRoad", False)),
         ])
 
@@ -99,7 +115,7 @@ def main():
     print()
 
     # --- Trajektorie speichern ---
-    traj_path  = RESULTS / "eval_trajectory.csv"
+    traj_path  = run_dir / "eval_trajectory.csv"
     track_path = RESULTS / "track.csv"
 
     with open(traj_path, "w", newline="") as f:
@@ -114,7 +130,7 @@ def main():
     make_plots(
         track_path,
         traj_path,
-        title_suffix=f"  [{best_model_path.stem}]",
+        title_suffix=f"  [{run_name} — {model_path.stem}]",
         show=True,
     )
 
