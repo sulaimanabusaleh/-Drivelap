@@ -40,7 +40,11 @@ os.chdir(HERE / "results")
 sim = drivelab.make_env(CONFIG)
 
 
-def obs_to_dict(obs) -> dict:
+def obs_to_dict(obs, state: list) -> dict:
+    xdot   = state[3]
+    ydot   = state[4]
+    psidot = state[5]
+    v = (xdot**2 + ydot**2) ** 0.5
     return {
         "e_y":       obs.e_y,
         "e_psi":     obs.e_psi,
@@ -48,6 +52,8 @@ def obs_to_dict(obs) -> dict:
         "laneWidth": obs.laneWidth,
         "distLeft":  obs.distLeft,
         "distRight": obs.distRight,
+        "v":         v,
+        "psidot":    psidot,
         "offRoad":   bool(obs.offRoad),
     }
 
@@ -75,7 +81,7 @@ for line in sys.stdin:
 
         if cmd == "reset":
             obs = sim.reset()
-            reply = {"status": "ok", "obs": obs_to_dict(obs)}
+            reply = {"status": "ok", "obs": obs_to_dict(obs, list(sim.current_state()))}
 
         elif cmd == "step":
             lenkwinkel = float(msg["lenkwinkel"])
@@ -87,7 +93,7 @@ for line in sys.stdin:
             state = list(sim.current_state())
             reply = {
                 "status": "ok",
-                "obs":    obs_to_dict(obs),
+                "obs":    obs_to_dict(obs, state),
                 "reward": reward,
                 "done":   terminated,
                 "info": {
