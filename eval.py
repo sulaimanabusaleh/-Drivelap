@@ -1,11 +1,10 @@
 """
 eval.py — Bestes Modell laden und testen.
 
-Ladet das gespeicherte beste Modell aus results/best_model/,
-faehrt eine deterministische Episode und zeigt die 5 Plots.
-
 Starten:
-    python eval.py
+    python eval.py                                         <- nimmt results/best_model/best_model.zip
+    python eval.py results/checkpoints/ppo_drivelab_10000_steps.zip
+    python eval.py C:/eigener/pfad/modell.zip
 """
 
 import csv
@@ -31,11 +30,19 @@ TRAJ_HEADER = [
 
 
 def main():
-    best_model_path = RESULTS / "best_model" / "best_model.zip"
-    vecnorm_path    = RESULTS / "vecnormalize.pkl"
+    # --- Pfad aus Argument oder Standard ---
+    if len(sys.argv) > 1:
+        best_model_path = Path(sys.argv[1])
+    else:
+        best_model_path = RESULTS / "best_model" / "best_model.zip"
+
+    vecnorm_path = RESULTS / "vecnormalize.pkl"
 
     if not best_model_path.exists():
-        sys.exit(f"Kein Modell gefunden unter: {best_model_path}")
+        sys.exit(
+            f"Modell nicht gefunden: {best_model_path}\n"
+            f"Benutze: python eval.py <pfad_zum_modell.zip>"
+        )
 
     print("=== DriveLab Eval ===")
     print(f"  Modell: {best_model_path}")
@@ -45,8 +52,8 @@ def main():
     vec_env = make_vec_env(DrivelabEnv, n_envs=1)
     if vecnorm_path.exists():
         vec_env = VecNormalize.load(str(vecnorm_path), vec_env)
-        vec_env.training = False       # keine Updates der Statistiken
-        vec_env.norm_reward = False    # Reward NICHT normalisieren
+        vec_env.training = False
+        vec_env.norm_reward = False
         print(f"  Normierung geladen: {vecnorm_path}")
     else:
         print("  Warnung: vecnormalize.pkl nicht gefunden — keine Normierung!")
@@ -70,9 +77,8 @@ def main():
         done = bool(terminated[0])
         step += 1
 
-        # Zustandsvektor aus info holen
         state = info[0].get("state", [0.0] * 13)
-        obs_raw = vec_env.get_original_obs()[0]   # unnormierte Obs
+        obs_raw = vec_env.get_original_obs()[0]
 
         rows.append([
             f"{info[0].get('t', 0.0):.5f}",
@@ -108,7 +114,7 @@ def main():
     make_plots(
         track_path,
         traj_path,
-        title_suffix="  [Bestes Modell — Eval]",
+        title_suffix=f"  [{best_model_path.stem}]",
         show=True,
     )
 
