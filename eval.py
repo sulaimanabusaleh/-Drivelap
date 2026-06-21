@@ -30,14 +30,11 @@ TRAJ_HEADER = [
 
 
 def main():
-    if len(sys.argv) < 2:
-        sys.exit(
-            "Bitte Modellpfad angeben:\n"
-            "  python eval.py results/run_1/best_model/best_model.zip\n"
-            "  python eval.py results/run_1/checkpoints/ppo_drivelab_10000_steps.zip"
-        )
+    # --- Pfad hier ändern ---
+    MODEL_PATH = "results/run_1/best_model/best_model.zip"
+    # ------------------------
 
-    model_path = Path(sys.argv[1])
+    model_path = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE / MODEL_PATH
 
     if not model_path.exists():
         sys.exit(f"Modell nicht gefunden: {model_path}")
