@@ -194,6 +194,7 @@ def main():
         clip_range=0.2,
         ent_coef=0.01,
         verbose=1,
+        tensorboard_log=str(run_dir / "tensorboard"),
     )
 
     print("Starte Training...")
