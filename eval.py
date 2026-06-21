@@ -2,9 +2,9 @@
 eval.py — Trainiertes Modell laden und testen.
 
 Starten:
-    python eval.py run_1                          <- bestes Modell aus results/run_1/
-    python eval.py run_2                          <- bestes Modell aus results/run_2/
-    python eval.py run_1 checkpoints/ppo_drivelab_10000_steps.zip  <- bestimmter Checkpoint
+    python eval.py results/run_1/best_model/best_model.zip
+    python eval.py results/run_1/checkpoints/ppo_drivelab_10000_steps.zip
+    python eval.py C:/eigener/pfad/modell.zip
 """
 
 import csv
@@ -32,36 +32,24 @@ TRAJ_HEADER = [
 def main():
     if len(sys.argv) < 2:
         sys.exit(
-            "Bitte Run-Name angeben:\n"
-            "  python eval.py run_1\n"
-            "  python eval.py run_1 checkpoints/ppo_drivelab_10000_steps.zip"
+            "Bitte Modellpfad angeben:\n"
+            "  python eval.py results/run_1/best_model/best_model.zip\n"
+            "  python eval.py results/run_1/checkpoints/ppo_drivelab_10000_steps.zip"
         )
 
-    run_name = sys.argv[1]
-    run_dir  = RESULTS / run_name
-
-    if not run_dir.exists():
-        sys.exit(f"Run-Ordner nicht gefunden: {run_dir}")
-
-    # Modellpfad: Standard = best_model, oder eigener Checkpoint
-    if len(sys.argv) > 2:
-        model_path = run_dir / sys.argv[2]
-    else:
-        model_path = run_dir / "best_model" / "best_model.zip"
-
-    vecnorm_path = run_dir / "vecnormalize.pkl"
+    model_path = Path(sys.argv[1])
 
     if not model_path.exists():
-        sys.exit(
-            f"Modell nicht gefunden: {model_path}\n"
-            f"Verfügbare Checkpoints in {run_dir / 'checkpoints'}:"
-            f"\n  " + "\n  ".join(str(p.name) for p in (run_dir / "checkpoints").glob("*.zip"))
-            if (run_dir / "checkpoints").exists() else ""
-        )
+        sys.exit(f"Modell nicht gefunden: {model_path}")
+
+    # vecnormalize.pkl liegt immer zwei Ebenen über dem Modell (run_dir)
+    # z.B. results/run_1/best_model/best_model.zip -> results/run_1/vecnormalize.pkl
+    run_dir      = model_path.parent.parent
+    vecnorm_path = run_dir / "vecnormalize.pkl"
 
     print("=== DriveLab Eval ===")
-    print(f"  Run     : {run_name}")
-    print(f"  Modell  : {model_path}")
+    print(f"  Modell     : {model_path}")
+    print(f"  Run-Ordner : {run_dir}")
     print()
 
     # --- Normierung laden ---
@@ -130,7 +118,7 @@ def main():
     make_plots(
         track_path,
         traj_path,
-        title_suffix=f"  [{run_name} — {model_path.stem}]",
+        title_suffix=f"  [{model_path.stem}]",
         show=True,
     )
 
