@@ -62,7 +62,12 @@ def road_length(road: str) -> float:
     return sum(seg["length"] for seg in data["segments"])
 
 os.chdir(HERE / "results")
-road = random.choice(ROADS)
+# Straße aus Argument oder zufällig
+if len(sys.argv) > 1:
+    road_name = sys.argv[1]
+    road = next((r for r in ROADS if road_name in r), ROADS[0])
+else:
+    road = random.choice(ROADS)
 config_path = make_config(road)
 sim = drivelab.make_env(config_path)
 os.unlink(config_path)

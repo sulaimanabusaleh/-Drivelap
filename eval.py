@@ -31,26 +31,26 @@ TRAJ_HEADER = [
 
 def main():
     # --- Pfad hier ändern ---
-    MODEL_PATH = "results/run_1/best_model/best_model.zip"
+    MODEL_PATH = "results/run_3/best_model/best_model.zip"
     # ------------------------
 
     model_path = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE / MODEL_PATH
+    road       = sys.argv[2] if len(sys.argv) > 2 else None
 
     if not model_path.exists():
         sys.exit(f"Modell nicht gefunden: {model_path}")
 
-    # vecnormalize.pkl liegt immer zwei Ebenen über dem Modell (run_dir)
-    # z.B. results/run_1/best_model/best_model.zip -> results/run_1/vecnormalize.pkl
     run_dir      = model_path.parent.parent
     vecnorm_path = run_dir / "vecnormalize.pkl"
 
     print("=== DriveLab Eval ===")
     print(f"  Modell     : {model_path}")
+    print(f"  Straße     : {road if road else 'zufällig'}")
     print(f"  Run-Ordner : {run_dir}")
     print()
 
     # --- Normierung laden ---
-    vec_env = make_vec_env(DrivelabEnv, n_envs=1)
+    vec_env = make_vec_env(lambda: DrivelabEnv(road=road), n_envs=1)
     if vecnorm_path.exists():
         vec_env = VecNormalize.load(str(vecnorm_path), vec_env)
         vec_env.training = False

@@ -43,7 +43,7 @@ class DrivelabEnv(gym.Env):
 
     metadata = {"render_modes": []}
 
-    def __init__(self):
+    def __init__(self, road: str = None):
         super().__init__()
 
         # Action Space: lenkwinkel in [-0.5, 0.5] rad
@@ -58,6 +58,7 @@ class DrivelabEnv(gym.Env):
             low=OBS_LOW, high=OBS_HIGH, dtype=np.float32
         )
 
+        self._road = road  # None = zufällig im Server
         self._proc = None
         self._start_server()
 
@@ -67,8 +68,12 @@ class DrivelabEnv(gym.Env):
         if self._proc is not None and self._proc.poll() is None:
             return  # läuft bereits
 
+        cmd = [PYTHON_313, SERVER_SCRIPT]
+        if self._road:
+            cmd.append(self._road)
+
         self._proc = subprocess.Popen(
-            [PYTHON_313, SERVER_SCRIPT],
+            cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
