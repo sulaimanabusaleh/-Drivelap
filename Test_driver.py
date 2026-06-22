@@ -8,7 +8,7 @@ ROOT = HERE.parent
 RESULTS = HERE / "results"
 RESULTS.mkdir(exist_ok=True)
 
-sys.path.insert(0, str(HERE / "drivelab.cp313-win_amd64"))  # Ordner mit der .pyd
+sys.path.insert(0, str(HERE))
 
 import os
 mingw_path = r"C:\Program Files\mingw64\bin"
@@ -17,6 +17,7 @@ if os.path.isdir(mingw_path):
 import drivelab
 
 
+os.chdir(RESULTS)
 env = drivelab.make_env(str(HERE / "config.json"))
 obs = env.reset()
 
