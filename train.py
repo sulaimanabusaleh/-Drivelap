@@ -70,6 +70,8 @@ class EvalAndPlotCallback(BaseCallback):
 
     def _on_rollout_end(self) -> None:
         self._update_count += 1
+        # vecnormalize nach jedem Update speichern — damit eval.py immer funktioniert
+        self.training_env.save(str(self._run_dir / "vecnormalize.pkl"))
         if self._update_count % self._plot_every != 0:
             return
 
