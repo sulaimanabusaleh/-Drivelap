@@ -31,7 +31,7 @@ TRAJ_HEADER = [
 
 def main():
     # --- Pfad hier ändern ---
-    MODEL_PATH = "results/run_3/best_model/best_model.zip"
+    MODEL_PATH = "results/run_2/best_model/best_model.zip"
     # ------------------------
 
     model_path = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE / MODEL_PATH
@@ -79,7 +79,7 @@ def main():
         step += 1
 
         state = info[0].get("state", [0.0] * 13)
-        obs_raw = vec_env.get_original_obs()[0]
+        obs_raw = vec_env.get_original_obs()[0] if hasattr(vec_env, "get_original_obs") else obs[0]
 
         rows.append([
             f"{info[0].get('t', 0.0):.5f}",
