@@ -19,6 +19,8 @@ Protokoll (newline-delimited JSON):
 import sys
 import os
 import json
+import random
+import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -35,9 +37,36 @@ W_LATERAL    = 2.0
 W_HEADING    = 0.5
 CRASH_REWARD = -10.0
 
-CONFIG = str(HERE / "config.json")
+# Alle verfügbaren Straßen
+ROADS = [
+    "./data/roads/newRoad.json",
+    "./data/roads/einfacher_Rundkurs.json",
+    "./data/roads/road3_kurvig.json",
+    "./data/roads/road4_komplex.json",
+]
+
+def make_config(road: str) -> str:
+    """Erstellt eine temporäre config.json mit der gewählten Straße."""
+    base = json.loads((HERE / "config.json").read_text())
+    base["road"] = road
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False, dir=HERE
+    )
+    json.dump(base, tmp)
+    tmp.close()
+    return tmp.name
+
+def road_length(road: str) -> float:
+    """Berechnet die Gesamtlänge der Straße aus der JSON."""
+    data = json.loads((HERE / road.lstrip("./")).read_text())
+    return sum(seg["length"] for seg in data["segments"])
+
 os.chdir(HERE / "results")
-sim = drivelab.make_env(CONFIG)
+road = random.choice(ROADS)
+config_path = make_config(road)
+sim = drivelab.make_env(config_path)
+os.unlink(config_path)
+ROAD_LENGTH = road_length(road)
 
 
 def obs_to_dict(obs, state: list) -> dict:
@@ -88,7 +117,7 @@ for line in sys.stdin:
             act = drivelab.Action(lenkwinkel=lenkwinkel, gas=0.0, bremse=0.0)
             result = sim.step(act)
             obs = result.obs
-            terminated = bool(result.done)
+            terminated = bool(result.done) or obs.s >= ROAD_LENGTH
             reward = compute_reward(obs, terminated)
             state = list(sim.current_state())
             reply = {

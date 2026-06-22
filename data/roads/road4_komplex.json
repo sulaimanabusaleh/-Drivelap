@@ -1,0 +1,18 @@
+{
+    "format": "drivelab-track",
+    "version": 1,
+    "name": "road4_komplex",
+    "start": {"x": 0.0, "y": 0.0, "hdg": 0.0},
+    "default_width": 10.0,
+    "segments": [
+        {"type": "line",   "length": 150.0},
+        {"type": "arc",    "length": 47.12, "curvature": 0.02},
+        {"type": "line",   "length": 50.0},
+        {"type": "arc",    "length": 47.12, "curvature": -0.02},
+        {"type": "line",   "length": 100.0},
+        {"type": "arc",    "length": 94.25, "curvature": 0.03},
+        {"type": "line",   "length": 80.0},
+        {"type": "arc",    "length": 47.12, "curvature": -0.03},
+        {"type": "line",   "length": 50.0}
+    ]
+}

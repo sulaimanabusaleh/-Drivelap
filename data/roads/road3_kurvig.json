@@ -1,0 +1,17 @@
+{
+    "format": "drivelab-track",
+    "version": 1,
+    "name": "road3_kurvig",
+    "start": {"x": 0.0, "y": 0.0, "hdg": 0.0},
+    "default_width": 10.0,
+    "segments": [
+        {"type": "line",   "length": 80.0},
+        {"type": "arc",    "length": 78.54, "curvature": 0.04},
+        {"type": "line",   "length": 60.0},
+        {"type": "arc",    "length": 78.54, "curvature": -0.04},
+        {"type": "line",   "length": 80.0},
+        {"type": "arc",    "length": 78.54, "curvature": 0.04},
+        {"type": "line",   "length": 60.0},
+        {"type": "arc",    "length": 78.54, "curvature": -0.04}
+    ]
+}
