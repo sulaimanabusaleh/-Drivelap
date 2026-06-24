@@ -2,9 +2,15 @@
 eval.py — Trainiertes Modell laden und testen.
 
 Starten:
-    python eval.py results/run_1/best_model/best_model.zip
-    python eval.py results/run_1/checkpoints/ppo_drivelab_10000_steps.zip
-    python eval.py C:/eigener/pfad/modell.zip
+    python eval.py                                              <- Standard-Modell, Straße wählen
+    python eval.py results/run_1/best_model/best_model.zip     <- Modell angeben, Straße wählen
+    python eval.py results/run_1/best_model/best_model.zip 2   <- Straße 2 direkt wählen
+
+Straßen:
+    1 = newRoad
+    2 = einfacher_Rundkurs
+    3 = road3_kurvig (S-Kurven)
+    4 = road4_komplex
 """
 
 import csv
@@ -22,6 +28,20 @@ from plotter import make_plots
 HERE    = Path(__file__).resolve().parent
 RESULTS = HERE / "results"
 
+ROADS = [
+    "./data/roads/newRoad.json",
+    "./data/roads/einfacher_Rundkurs.json",
+    "./data/roads/road3_kurvig.json",
+    "./data/roads/road4_komplex.json",
+]
+
+ROAD_NAMES = [
+    "newRoad",
+    "einfacher_Rundkurs",
+    "road3_kurvig (S-Kurven)",
+    "road4_komplex",
+]
+
 TRAJ_HEADER = [
     "t", "x", "y", "psi", "xdot", "ydot", "psidot",
     "rho_v", "rho_h", "Fvx", "Fvy", "Fhx", "Fhy", "dist",
@@ -29,13 +49,42 @@ TRAJ_HEADER = [
 ]
 
 
+def choose_road() -> str | None:
+    """Zeigt ein Menü zur Straßenauswahl. Gibt den Pfad zurück oder None (zufällig)."""
+    print("Wähle Straße:")
+    for i, name in enumerate(ROAD_NAMES, 1):
+        print(f"  {i}) {name}")
+    print("  [Enter] = zufällig")
+    choice = input("Deine Wahl: ").strip()
+    if choice == "":
+        return None
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(ROADS):
+            return ROADS[idx]
+    except ValueError:
+        pass
+    print("Ungültige Auswahl — zufällige Straße wird verwendet.")
+    return None
+
+
 def main():
     # --- Pfad hier ändern ---
-    MODEL_PATH = "results/run_2/best_model/best_model.zip"
+    MODEL_PATH = "results/run_4/best_model/best_model.zip"
     # ------------------------
 
     model_path = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE / MODEL_PATH
-    road       = sys.argv[2] if len(sys.argv) > 2 else None
+
+    # Straße: Argument (Nummer 1-4 oder Pfad) oder interaktives Menü
+    if len(sys.argv) > 2:
+        arg = sys.argv[2]
+        try:
+            idx = int(arg) - 1
+            road = ROADS[idx] if 0 <= idx < len(ROADS) else None
+        except ValueError:
+            road = arg  # direkt als Pfad verwenden
+    else:
+        road = choose_road()
 
     if not model_path.exists():
         sys.exit(f"Modell nicht gefunden: {model_path}")
@@ -43,9 +92,11 @@ def main():
     run_dir      = model_path.parent.parent
     vecnorm_path = run_dir / "vecnormalize.pkl"
 
-    print("=== DriveLab Eval ===")
+    road_label = next((ROAD_NAMES[i] for i, r in enumerate(ROADS) if r == road), road) if road else "zufällig"
+
+    print("\n=== DriveLab Eval ===")
     print(f"  Modell     : {model_path}")
-    print(f"  Straße     : {road if road else 'zufällig'}")
+    print(f"  Straße     : {road_label}")
     print(f"  Run-Ordner : {run_dir}")
     print()
 
