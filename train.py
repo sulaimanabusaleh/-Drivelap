@@ -38,12 +38,20 @@ RESULTS = HERE / "results"
 RESULTS.mkdir(exist_ok=True)
 
 # --- Hyperparameter -------------------------------------------------
-TOTAL_TIMESTEPS      = 500_000
 N_ENVS               = 4
 EVAL_FREQ            = 10_000
 CHECKPOINT_FREQ      = 10_000
 EVAL_EPISODES        = 5
 PLOT_EVERY_N_UPDATES = 1
+
+# --- Curriculum: Straße → Schritte ----------------------------------
+CURRICULUM = [
+    ("./data/roads/newRoad.json",              250_000),
+    ("./data/roads/einfacher_Rundkurs.json",   250_000),
+    ("./data/roads/road3_kurvig.json",          250_000),
+    ("./data/roads/road4_komplex.json",         250_000),
+]
+TOTAL_TIMESTEPS = sum(steps for _, steps in CURRICULUM)  # 1_000_000
 
 
 TRAJ_HEADER = [
@@ -62,11 +70,12 @@ def next_run_name() -> str:
 
 
 class EvalAndPlotCallback(BaseCallback):
-    def __init__(self, run_dir: Path, plot_every: int = PLOT_EVERY_N_UPDATES, verbose: int = 1):
+    def __init__(self, run_dir: Path, road: str = None, plot_every: int = PLOT_EVERY_N_UPDATES, verbose: int = 1):
         super().__init__(verbose)
         self._update_count = 0
         self._plot_every   = plot_every
         self._run_dir      = run_dir
+        self.road          = road  # aktuelle Straße — wird zwischen Phasen gesetzt
 
     def _on_rollout_end(self) -> None:
         self._update_count += 1
@@ -81,9 +90,10 @@ class EvalAndPlotCallback(BaseCallback):
         track_path = RESULTS / "track.csv"
 
         if self.verbose:
-            print(f"\n[EvalAndPlot] Update {self._update_count} — fahre Eval-Episode ...")
+            road_label = self.road or "zufällig"
+            print(f"\n[EvalAndPlot] Update {self._update_count} — Straße: {road_label}")
 
-        eval_env = DrivelabEnv()
+        eval_env = DrivelabEnv(road=self.road)
         obs_raw, _ = eval_env.reset()
         rows = []
         done = False
@@ -134,8 +144,8 @@ class EvalAndPlotCallback(BaseCallback):
         return True
 
 
-def make_env():
-    return DrivelabEnv()
+def make_env(road: str = None):
+    return DrivelabEnv(road=road)
 
 
 def main():
@@ -150,39 +160,20 @@ def main():
         print(f"Warnung: Ordner '{run_dir}' existiert bereits — Dateien werden überschrieben.")
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    print("=== DriveLab RL-Training (PPO) ===")
+    print("=== DriveLab RL-Training (PPO) — Curriculum Learning ===")
     print(f"  Run-Name        : {run_name}")
     print(f"  Ergebnisse in   : {run_dir}")
     print(f"  Gesamt-Schritte : {TOTAL_TIMESTEPS:,}")
     print(f"  Parallele Envs  : {N_ENVS}")
-    print(f"  Plot alle       : {PLOT_EVERY_N_UPDATES} Updates")
+    print(f"  Curriculum:")
+    for road, steps in CURRICULUM:
+        print(f"    {steps:>9,} Steps → {road}")
     print()
 
-    vec_train = make_vec_env(make_env, n_envs=N_ENVS)
+    # --- Phase 1: Modell erstellen mit erster Straße ----------------
+    road0, steps0 = CURRICULUM[0]
+    vec_train = make_vec_env(lambda: make_env(road0), n_envs=N_ENVS)
     vec_train = VecNormalize(vec_train, norm_obs=True, norm_reward=True, clip_obs=10.0)
-
-    vec_eval = make_vec_env(make_env, n_envs=1)
-    vec_eval = VecNormalize(vec_eval, norm_obs=True, norm_reward=False,
-                            clip_obs=10.0, training=False)
-
-    checkpoint_cb = CheckpointCallback(
-        save_freq=CHECKPOINT_FREQ,
-        save_path=str(run_dir / "checkpoints"),
-        name_prefix="ppo_drivelab",
-        verbose=1,
-    )
-    eval_cb = EvalCallback(
-        eval_env=vec_eval,
-        best_model_save_path=str(run_dir / "best_model"),
-        log_path=str(run_dir / "eval_logs"),
-        eval_freq=EVAL_FREQ,
-        n_eval_episodes=EVAL_EPISODES,
-        deterministic=True,
-        verbose=1,
-    )
-    plot_cb = EvalAndPlotCallback(run_dir=run_dir, plot_every=PLOT_EVERY_N_UPDATES, verbose=1)
-
-    callbacks = CallbackList([checkpoint_cb, eval_cb, plot_cb])
 
     model = PPO(
         policy="MlpPolicy",
@@ -199,8 +190,53 @@ def main():
         tensorboard_log=str(run_dir / "tensorboard"),
     )
 
-    print("Starte Training...")
-    model.learn(total_timesteps=TOTAL_TIMESTEPS, callback=callbacks)
+    # --- Curriculum-Schleife ----------------------------------------
+    for phase_idx, (road, steps) in enumerate(CURRICULUM):
+        phase_num = phase_idx + 1
+        print(f"\n{'='*55}")
+        print(f"  PHASE {phase_num}/4 — {steps:,} Steps auf: {road}")
+        print(f"{'='*55}\n")
+
+        if phase_idx > 0:
+            # Neue Umgebung mit neuer Straße, VecNormalize-Stats übernehmen
+            vec_train_new = make_vec_env(lambda r=road: make_env(r), n_envs=N_ENVS)
+            vecnorm_path  = str(run_dir / "vecnormalize.pkl")
+            vec_train     = VecNormalize.load(vecnorm_path, vec_train_new)
+            vec_train.training   = True
+            vec_train.norm_reward = True
+            model.set_env(vec_train)
+
+        checkpoint_cb = CheckpointCallback(
+            save_freq=CHECKPOINT_FREQ,
+            save_path=str(run_dir / "checkpoints"),
+            name_prefix=f"ppo_phase{phase_num}",
+            verbose=1,
+        )
+        vec_eval = make_vec_env(lambda r=road: make_env(r), n_envs=1)
+        vec_eval = VecNormalize(vec_eval, norm_obs=True, norm_reward=False,
+                                clip_obs=10.0, training=False)
+        eval_cb = EvalCallback(
+            eval_env=vec_eval,
+            best_model_save_path=str(run_dir / "best_model"),
+            log_path=str(run_dir / "eval_logs"),
+            eval_freq=EVAL_FREQ,
+            n_eval_episodes=EVAL_EPISODES,
+            deterministic=True,
+            verbose=1,
+        )
+        plot_cb = EvalAndPlotCallback(run_dir=run_dir, road=road, plot_every=PLOT_EVERY_N_UPDATES, verbose=1)
+        callbacks = CallbackList([checkpoint_cb, eval_cb, plot_cb])
+
+        model.learn(
+            total_timesteps=steps,
+            callback=callbacks,
+            reset_num_timesteps=False,  # Schritte addieren, nicht neu starten
+        )
+
+        # VecNormalize nach jeder Phase speichern
+        vec_train.save(str(run_dir / "vecnormalize.pkl"))
+        model.save(str(run_dir / f"ppo_phase{phase_num}_end"))
+        print(f"\n  Phase {phase_num} abgeschlossen — Modell gespeichert.")
 
     model.save(str(run_dir / "ppo_drivelab_final"))
     vec_train.save(str(run_dir / "vecnormalize.pkl"))

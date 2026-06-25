@@ -1,16 +1,9 @@
 """
-eval.py — Trainiertes Modell laden und testen.
+modell_test.py — Trainiertes Modell auf der Teststrecke road5_test testen.
 
 Starten:
-    python eval.py                                              <- Standard-Modell, Straße wählen
-    python eval.py results/run_1/best_model/best_model.zip     <- Modell angeben, Straße wählen
-    python eval.py results/run_1/best_model/best_model.zip 2   <- Straße 2 direkt wählen
-
-Straßen:
-    1 = newRoad
-    2 = einfacher_Rundkurs
-    3 = road3_kurvig (S-Kurven)
-    4 = road4_komplex
+    python modell_test.py
+    python modell_test.py results/run_5/best_model/best_model.zip
 """
 
 import csv
@@ -28,19 +21,8 @@ from plotter import make_plots
 HERE    = Path(__file__).resolve().parent
 RESULTS = HERE / "results"
 
-ROADS = [
-    "./data/roads/newRoad.json",
-    "./data/roads/einfacher_Rundkurs.json",
-    "./data/roads/road3_kurvig.json",
-    "./data/roads/road4_komplex.json",
-]
-
-ROAD_NAMES = [
-    "newRoad",
-    "einfacher_Rundkurs",
-    "road3_kurvig (S-Kurven)",
-    "road4_komplex",
-]
+# --- Teststrecke (neu, unbekannt für das Modell) ---
+TEST_ROAD = "./data/roads/road5_test.json"
 
 TRAJ_HEADER = [
     "t", "x", "y", "psi", "xdot", "ydot", "psidot",
@@ -49,42 +31,13 @@ TRAJ_HEADER = [
 ]
 
 
-def choose_road() -> str | None:
-    """Zeigt ein Menü zur Straßenauswahl. Gibt den Pfad zurück oder None (zufällig)."""
-    print("Wähle Straße:")
-    for i, name in enumerate(ROAD_NAMES, 1):
-        print(f"  {i}) {name}")
-    print("  [Enter] = zufällig")
-    choice = input("Deine Wahl: ").strip()
-    if choice == "":
-        return None
-    try:
-        idx = int(choice) - 1
-        if 0 <= idx < len(ROADS):
-            return ROADS[idx]
-    except ValueError:
-        pass
-    print("Ungültige Auswahl — zufällige Straße wird verwendet.")
-    return None
-
-
 def main():
-    # --- Pfad hier ändern ---
-    MODEL_PATH = "results/run_5/best_model/best_model.zip"
-    # ------------------------
+    # -------------------------------------------------------
+    # Modell-Pfad hier ändern:
+    MODEL_PATH = "results/run_6/best_model/best_model.zip"
+    # -------------------------------------------------------
 
     model_path = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE / MODEL_PATH
-
-    # Straße: Argument (Nummer 1-4 oder Pfad) oder interaktives Menü
-    if len(sys.argv) > 2:
-        arg = sys.argv[2]
-        try:
-            idx = int(arg) - 1
-            road = ROADS[idx] if 0 <= idx < len(ROADS) else None
-        except ValueError:
-            road = arg  # direkt als Pfad verwenden
-    else:
-        road = choose_road()
 
     if not model_path.exists():
         sys.exit(f"Modell nicht gefunden: {model_path}")
@@ -92,16 +45,14 @@ def main():
     run_dir      = model_path.parent.parent
     vecnorm_path = run_dir / "vecnormalize.pkl"
 
-    road_label = next((ROAD_NAMES[i] for i, r in enumerate(ROADS) if r == road), road) if road else "zufällig"
-
-    print("\n=== DriveLab Eval ===")
-    print(f"  Modell     : {model_path}")
-    print(f"  Straße     : {road_label}")
-    print(f"  Run-Ordner : {run_dir}")
+    print("=== DriveLab Modell-Test (Teststrecke) ===")
+    print(f"  Modell      : {model_path}")
+    print(f"  Teststrecke : {TEST_ROAD}")
+    print(f"  Run-Ordner  : {run_dir}")
     print()
 
-    # --- Normierung laden ---
-    vec_env = make_vec_env(lambda: DrivelabEnv(road=road), n_envs=1)
+    # --- Umgebung mit Teststrecke ---
+    vec_env = make_vec_env(lambda: DrivelabEnv(road=TEST_ROAD), n_envs=1)
     if vecnorm_path.exists():
         vec_env = VecNormalize.load(str(vecnorm_path), vec_env)
         vec_env.training = False
@@ -115,7 +66,7 @@ def main():
     print("  Modell geladen.\n")
 
     # --- Episode fahren ---
-    print("Fahre Eval-Episode ...")
+    print("Fahre Test-Episode ...")
     obs = vec_env.reset()
     done = False
     rows = []
@@ -145,9 +96,9 @@ def main():
 
     vec_env.close()
 
-    sim_time   = info[0].get("t", 0.0)
-    strecke_s  = info[0].get("s", 0.0)
-    off_road   = info[0].get("offRoad", False)
+    sim_time  = info[0].get("t", 0.0)
+    strecke_s = info[0].get("s", 0.0)
+    off_road  = info[0].get("offRoad", False)
 
     print(f"  Schritte         : {step}")
     print(f"  Simulationszeit  : {sim_time:.2f} s  ({sim_time/60:.1f} min)")
@@ -158,8 +109,8 @@ def main():
         print(f"  --> Strecke ERFOLGREICH abgeschlossen in {sim_time:.2f} Sekunden!")
     print()
 
-    # --- Trajektorie speichern ---
-    traj_path  = run_dir / "eval_trajectory.csv"
+    # --- Ergebnisse speichern ---
+    traj_path  = run_dir / "test_trajectory.csv"
     track_path = RESULTS / "track.csv"
 
     with open(traj_path, "w", newline="") as f:
@@ -174,7 +125,7 @@ def main():
     make_plots(
         track_path,
         traj_path,
-        title_suffix=f"  [{model_path.stem}]",
+        title_suffix=f"  [{model_path.stem} | Teststrecke road5]",
         show=True,
     )
 

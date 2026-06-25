@@ -1,0 +1,13 @@
+{
+    "format": "drivelab-track", 
+    "version": 1, 
+    "name": "einfacher_Rundkurs", 
+    "start": {"x":0.0, "y": 0.0, "hdg": 0.0}, 
+    "default_width": 10.0, 
+    "segments": [
+        {"type": "line", "length": 100.0}, 
+        {"type": "arc", "length": 157.08, "curvature": 0.02},
+        {"type": "line", "length": 100.0}, 
+        {"type": "arc", "length": 157.08, "curvature": 0.02}
+    ]
+}

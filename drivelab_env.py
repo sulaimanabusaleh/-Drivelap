@@ -6,10 +6,10 @@ Architektur (Zwei-Prozess-Bridge):
   drivelab_env.py     läuft in Python 3.12 (py312) — hat gymnasium + SB3
   Kommunikation: newline-delimited JSON über stdin/stdout
 
-Ziel:     Spurhalten (Lane Keeping)
-Action:   lenkwinkel [rad]  (1D, kontinuierlich, [-0.5, 0.5])
-Obs:      [e_y, e_psi, curvature, distLeft, distRight]  (5D)
-Reward:   +1/Schritt - 2*e_y² - 0.5*e_psi²  (Crash: -10)
+Ziel:     Spurhalten + Geschwindigkeitsregelung
+Action:   [lenkwinkel, gas, bremse]  (3D, kontinuierlich)
+Obs:      [e_y, e_psi, curvature, distLeft, distRight, laneWidth, v, psidot]  (8D)
+Reward:   +1/Schritt - 2*e_y² - 0.5*e_psi² - 0.3*(v-10)²  (Crash: -10)
 """
 
 import json
@@ -33,6 +33,8 @@ OBS_HIGH = np.array([ 5.0,   1.5,   0.2,  10.0,  10.0,  10.0,  50.0,   5.0], dty
 #                    e_y    e_psi  curv  distL  distR  laneW    v   psidot
 
 LENKWINKEL_MAX = 0.5
+GAS_MAX        = 1.0
+BREMSE_MAX     = 1.0
 
 
 class DrivelabEnv(gym.Env):
@@ -46,10 +48,10 @@ class DrivelabEnv(gym.Env):
     def __init__(self, road: str = None):
         super().__init__()
 
-        # Action Space: lenkwinkel in [-0.5, 0.5] rad
+        # Action Space: [lenkwinkel, gas, bremse]
         self.action_space = spaces.Box(
-            low=np.array([-LENKWINKEL_MAX], dtype=np.float32),
-            high=np.array([ LENKWINKEL_MAX], dtype=np.float32),
+            low=np.array( [-LENKWINKEL_MAX, 0.0,      0.0       ], dtype=np.float32),
+            high=np.array([ LENKWINKEL_MAX, GAS_MAX,  BREMSE_MAX], dtype=np.float32),
             dtype=np.float32,
         )
 
@@ -107,7 +109,10 @@ class DrivelabEnv(gym.Env):
 
     def step(self, action):
         lenkwinkel = float(np.clip(action[0], -LENKWINKEL_MAX, LENKWINKEL_MAX))
-        reply = self._send({"cmd": "step", "lenkwinkel": lenkwinkel})
+        gas        = float(np.clip(action[1],  0.0,            GAS_MAX))
+        bremse     = float(np.clip(action[2],  0.0,            BREMSE_MAX))
+        reply = self._send({"cmd": "step", "lenkwinkel": lenkwinkel,
+                            "gas": gas, "bremse": bremse})
         obs_arr    = self._obs_to_array(reply["obs"])
         reward     = float(reply["reward"])
         terminated = bool(reply["done"])

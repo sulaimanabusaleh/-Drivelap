@@ -35,7 +35,12 @@ import drivelab
 # Reward-Gewichte (müssen identisch mit drivelab_env.py sein)
 W_LATERAL    = 2.0
 W_HEADING    = 0.5
+W_STEER      = 0.5    # Run C: sanftes Lenken
 CRASH_REWARD = -10.0
+
+# Reward-Modus: "A" = v_target fix, "B" = Fortschritt, "C" = Fortschritt + Lenkstrafe
+REWARD_MODE  = "B"
+V_TARGET     = 10.0   # nur für Modus A
 
 # Alle verfügbaren Straßen
 ROADS = [
@@ -65,7 +70,8 @@ os.chdir(HERE / "results")
 # Straße aus Argument oder zufällig
 if len(sys.argv) > 1:
     road_name = sys.argv[1]
-    road = next((r for r in ROADS if road_name in r), ROADS[0])
+    matched = next((r for r in ROADS if road_name in r), None)
+    road = matched if matched else road_name  # unbekannte Straße direkt verwenden
 else:
     road = random.choice(ROADS)
 config_path = make_config(road)
@@ -92,14 +98,45 @@ def obs_to_dict(obs, state: list) -> dict:
     }
 
 
-def compute_reward(obs, terminated: bool) -> float:
+def compute_reward(obs, state: list, terminated: bool,
+                   s_prev: float = 0.0, lenkwinkel_prev: float = 0.0,
+                   lenkwinkel: float = 0.0) -> float:
     if terminated and obs.offRoad:
         return CRASH_REWARD
-    r = 1.0
-    r -= W_LATERAL * obs.e_y   ** 2
-    r -= W_HEADING * obs.e_psi ** 2
+
+    xdot = state[3]
+    ydot = state[4]
+    v    = (xdot**2 + ydot**2) ** 0.5
+
+    if REWARD_MODE == "A":
+        # --- Run A: feste Zielgeschwindigkeit ---
+        r  = 1.0
+        r -= W_LATERAL * obs.e_y   ** 2
+        r -= W_HEADING * obs.e_psi ** 2
+        r -= 0.3       * (v - V_TARGET) ** 2
+
+    elif REWARD_MODE == "B":
+        # --- Run B: Fortschritt (zeitoptimal) ---
+        fortschritt = obs.s - s_prev
+        r  = fortschritt
+        r -= W_LATERAL * obs.e_y   ** 2
+        r -= W_HEADING * obs.e_psi ** 2
+
+    else:  # "C"
+        # --- Run C: Fortschritt + sanftes Lenken ---
+        fortschritt  = obs.s - s_prev
+        lenkänderung = abs(lenkwinkel - lenkwinkel_prev)
+        r  = fortschritt
+        r -= W_LATERAL * obs.e_y   ** 2
+        r -= W_HEADING * obs.e_psi ** 2
+        r -= W_STEER   * lenkänderung
+
     return r
 
+
+# Zustand zwischen Schritten merken (für Fortschritts-Reward)
+s_prev         = 0.0
+lenkwinkel_prev = 0.0
 
 # Signalisiere dem Elternprozess, dass wir bereit sind
 sys.stdout.write(json.dumps({"status": "ready"}) + "\n")
@@ -115,16 +152,25 @@ for line in sys.stdin:
 
         if cmd == "reset":
             obs = sim.reset()
+            s_prev          = obs.s
+            lenkwinkel_prev = 0.0
             reply = {"status": "ok", "obs": obs_to_dict(obs, list(sim.current_state()))}
 
         elif cmd == "step":
             lenkwinkel = float(msg["lenkwinkel"])
-            act = drivelab.Action(lenkwinkel=lenkwinkel, gas=0.0, bremse=0.0)
+            gas        = float(msg.get("gas",    0.0))
+            bremse     = float(msg.get("bremse", 0.0))
+            act = drivelab.Action(lenkwinkel=lenkwinkel, gas=gas, bremse=bremse)
             result = sim.step(act)
             obs = result.obs
             terminated = bool(result.done) or obs.s >= ROAD_LENGTH
-            reward = compute_reward(obs, terminated)
             state = list(sim.current_state())
+            reward = compute_reward(obs, state, terminated,
+                                    s_prev=s_prev,
+                                    lenkwinkel_prev=lenkwinkel_prev,
+                                    lenkwinkel=lenkwinkel)
+            s_prev          = obs.s
+            lenkwinkel_prev = lenkwinkel
             reply = {
                 "status": "ok",
                 "obs":    obs_to_dict(obs, state),
